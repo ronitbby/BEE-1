@@ -63,3 +63,137 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+// User Registration (Default role is member)
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { name, email, password } = req.body
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Please provide name, email and password' })
+    }
+
+    const cleanEmail = email.toLowerCase()
+    const existingUser = await User.findOne({ email: cleanEmail })
+    if (existingUser) {
+      return res.status(400).json({ error: 'An account with this email already exists' })
+    }
+
+    const salt = await bcrypt.genSalt(10)
+    const hashedPassword = await bcrypt.hash(password, salt)
+
+    const user = await User.create({
+      name,
+      email: cleanEmail,
+      password: hashedPassword,
+      role: 'member',
+      isActive: true
+    })
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role, name: user.name, email: user.email },
+      JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    )
+
+    res.status(201).json({
+      message: 'Registration successful!',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive
+      }
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// User Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Please provide both email and password' })
+    }
+
+    const cleanEmail = email.toLowerCase()
+    const user = await User.findOne({ email: cleanEmail })
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' })
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({ error: 'Your account has been deactivated by an Admin. Contact library staff.' })
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password)
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' })
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role, name: user.name, email: user.email },
+      JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    )
+
+    res.json({
+      message: 'Login successful!',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive
+      }
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Get currently logged-in user profile
+app.get('/api/auth/me', protect, (req, res) => {
+  res.json({
+    id: req.user._id,
+    name: req.user.name,
+    email: req.user.email,
+    role: req.user.role,
+    isActive: req.user.isActive
+  })
+})
+
+// Get books list (with search, genre filter, and archived filter)
+app.get('/api/books', async (req, res) => {
+  try {
+    const { search, genre, includeArchived } = req.query
+    const filter = {}
+
+    if (includeArchived !== 'true') {
+      filter.isArchived = { $ne: true }
+    }
+
+    if (genre) {
+      filter.genre = genre
+    }
+
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { author: { $regex: search, $options: 'i' } },
+        { genre: { $regex: search, $options: 'i' } }
+      ]
+    }
+
+    const books = await Book.find(filter).sort({ createdAt: -1 })
+    res.json(books)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
