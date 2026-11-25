@@ -13,7 +13,7 @@
 <br/>
 
 <p align="center">
-  <img src="frontend/src/assets/hero.png" alt="Library Management System Hero" width="220" style="border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);" />
+  <img src="./hero.png" alt="Library Management System Hero" width="260" />
 </p>
 
 <p align="center">
