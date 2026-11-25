@@ -197,3 +197,58 @@ app.get('/api/books', async (req, res) => {
   }
 })
 
+// Add a new book (Librarian and Admin only)
+app.post('/api/books', protect, restrictTo('librarian', 'admin'), async (req, res) => {
+  try {
+    const { title, author, genre, totalCopies, coverColor } = req.body
+
+    if (!title || !author) {
+      return res.status(400).json({ error: 'Title and author are required' })
+    }
+
+    const copies = Number(totalCopies) || 1
+    const book = await Book.create({
+      title,
+      author,
+      genre: genre || 'General',
+      totalCopies: copies,
+      available: copies,
+      coverColor: coverColor || '#4f46e5',
+      isArchived: false,
+      borrowCount: 0
+    })
+
+    res.status(201).json(book)
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+// Update book details (Librarian and Admin only)
+app.put('/api/books/:id', protect, restrictTo('librarian', 'admin'), async (req, res) => {
+  try {
+    const book = await Book.findById(req.params.id)
+    if (!book) {
+      return res.status(404).json({ error: 'Book not found' })
+    }
+
+    const { title, author, genre, totalCopies, coverColor } = req.body
+
+    if (title) book.title = title
+    if (author) book.author = author
+    if (genre) book.genre = genre
+    if (coverColor) book.coverColor = coverColor
+
+    if (totalCopies !== undefined) {
+      const newTotal = Number(totalCopies)
+      const diff = newTotal - book.totalCopies
+      book.totalCopies = newTotal
+      book.available = Math.max(0, book.available + diff)
+    }
+
+    await book.save()
+    res.json(book)
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
